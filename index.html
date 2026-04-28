@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stopwatch</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Helvetica Neue', sans-serif;
+    user-select: none;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    padding: 48px 56px;
+    width: 400px;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #aaa;
+    letter-spacing: 0.2em;
+    margin-bottom: 36px;
+    text-transform: uppercase;
+  }
+
+  #display {
+    font-size: 64px;
+    font-weight: 700;
+    color: #111;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+
+  #ms {
+    font-size: 28px;
+    font-weight: 400;
+    color: #bbb;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 40px;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  button {
+    flex: 1;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: background 0.15s, transform 0.08s;
+  }
+
+  button:active { transform: scale(0.96); }
+
+  #startBtn {
+    background: #222;
+    color: #fff;
+    flex: 2;
+  }
+
+  #startBtn:hover { background: #444; }
+  #startBtn.running { background: #e53e3e; }
+  #startBtn.running:hover { background: #c53030; }
+
+  #lapBtn, #resetBtn {
+    background: #f0f0f0;
+    color: #555;
+  }
+
+  #lapBtn:hover, #resetBtn:hover { background: #e0e0e0; }
+  #lapBtn:disabled { opacity: 0.3; cursor: default; }
+
+  #laps {
+    max-height: 220px;
+    overflow-y: auto;
+    text-align: left;
+  }
+
+  #laps:empty::before {
+    content: 'ラップなし';
+    display: block;
+    text-align: center;
+    color: #ccc;
+    font-size: 13px;
+    padding: 16px 0;
+  }
+
+  .lap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 4px;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 14px;
+    animation: fadeIn 0.15s ease;
+  }
+
+  .lap-item:last-child { border-bottom: none; }
+
+  .lap-num { color: #aaa; font-weight: 500; min-width: 48px; }
+  .lap-split { color: #111; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lap-total { color: #bbb; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .lap-item.best .lap-split { color: #38a169; }
+  .lap-item.worst .lap-split { color: #e53e3e; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  #laps::-webkit-scrollbar { width: 4px; }
+  #laps::-webkit-scrollbar-track { background: transparent; }
+  #laps::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Stopwatch</h1>
+  <div id="display">00:00</div>
+  <div id="ms">.00</div>
+  <div class="buttons">
+    <button id="lapBtn" disabled>ラップ</button>
+    <button id="startBtn">スタート</button>
+    <button id="resetBtn">リセット</button>
+  </div>
+  <div id="laps"></div>
+</div>
+
+<script>
+  const displayEl = document.getElementById('display');
+  const msEl      = document.getElementById('ms');
+  const startBtn  = document.getElementById('startBtn');
+  const lapBtn    = document.getElementById('lapBtn');
+  const resetBtn  = document.getElementById('resetBtn');
+  const lapsEl    = document.getElementById('laps');
+
+  let running    = false;
+  let startTime  = 0;
+  let elapsed    = 0;   // ms accumulated before current run
+  let lapStart   = 0;   // elapsed at last lap
+  let laps       = [];
+  let raf        = null;
+
+  function format(ms, short = false) {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    if (short) return `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function formatMs(ms) {
+    return '.' + String(Math.floor((ms % 1000) / 10)).padStart(2,'0');
+  }
+
+  function tick() {
+    const now = elapsed + (performance.now() - startTime);
+    displayEl.textContent = format(now);
+    msEl.textContent = formatMs(now);
+    raf = requestAnimationFrame(tick);
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (!running) {
+      running = true;
+      startTime = performance.now();
+      lapBtn.disabled = false;
+      startBtn.textContent = 'ストップ';
+      startBtn.classList.add('running');
+      raf = requestAnimationFrame(tick);
+    } else {
+      running = false;
+      elapsed += performance.now() - startTime;
+      cancelAnimationFrame(raf);
+      startBtn.textContent = 'スタート';
+      startBtn.classList.remove('running');
+    }
+  });
+
+  lapBtn.addEventListener('click', () => {
+    if (!running) return;
+    const now = elapsed + (performance.now() - startTime);
+    const split = now - lapStart;
+    laps.unshift({ split, total: now });
+    lapStart = now;
+    renderLaps();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    running = false;
+    cancelAnimationFrame(raf);
+    elapsed = 0;
+    lapStart = 0;
+    laps = [];
+    displayEl.textContent = '00:00';
+    msEl.textContent = '.00';
+    startBtn.textContent = 'スタート';
+    startBtn.classList.remove('running');
+    lapBtn.disabled = true;
+    lapsEl.innerHTML = '';
+  });
+
+  function renderLaps() {
+    if (laps.length < 2) {
+      lapsEl.innerHTML = '';
+      laps.forEach((l, i) => appendLap(l, i, false, false));
+      return;
+    }
+    const splits = laps.map(l => l.split);
+    const best  = Math.min(...splits);
+    const worst = Math.max(...splits);
+    lapsEl.innerHTML = '';
+    laps.forEach((l, i) => {
+      const isBest  = l.split === best;
+      const isWorst = l.split === worst;
+      appendLap(l, i, isBest, isWorst);
+    });
+  }
+
+  function appendLap(l, i, isBest, isWorst) {
+    const num = laps.length - i;
+    const div = document.createElement('div');
+    div.className = 'lap-item' + (isBest ? ' best' : isWorst ? ' worst' : '');
+    div.innerHTML = `
+      <span class="lap-num">Lap ${String(num).padStart(2,'0')}</span>
+      <span class="lap-split">${format(l.split)}<span style="font-weight:400;color:#bbb">${formatMs(l.split)}</span></span>
+      <span class="lap-total">${format(l.total)}${formatMs(l.total)}</span>
+    `;
+    lapsEl.appendChild(div);
+  }
+</script>
+</body>
+</html>
